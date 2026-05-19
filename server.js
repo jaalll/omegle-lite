@@ -5,17 +5,30 @@ const { WebSocketServer } = require('ws');
 
 // Simple static file server
 const server = http.createServer((req, res) => {
-  let filePath = path.join(__dirname, 'public', req.url === '/' ? 'index.html' : req.url);
-  const ext = path.extname(filePath);
+  // Strip query strings and decode URI
+  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  const safePath = urlPath === '/' ? 'index.html' : urlPath.replace(/^\//, '');
+  const filePath = path.join(__dirname, 'public', safePath);
+
+  // Prevent directory traversal
+  if (!filePath.startsWith(path.join(__dirname, 'public'))) {
+    res.writeHead(403);
+    return res.end('Forbidden');
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
   const mimeTypes = {
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.js': 'application/javascript',
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.ico': 'image/x-icon',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
   };
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      res.writeHead(404);
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
       return res.end('Not found');
     }
     res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'text/plain' });
@@ -42,6 +55,7 @@ wss.on('connection', (ws) => {
   const id = nextId++;
   clients.set(ws, { id, partner: null });
 
+  console.log(`[+] Usuario conectado | id=${id} | online=${clients.size}`);
   send(ws, { type: 'connected', id });
 
   // Try to pair with waiting user
@@ -87,6 +101,7 @@ wss.on('connection', (ws) => {
     }
 
     clients.delete(ws);
+    console.log(`[-] Usuario desconectado | id=${client?.id} | online=${clients.size}`);
   });
 });
 
